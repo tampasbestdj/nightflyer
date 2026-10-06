@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NightFlyer — Flyer up before last call</title>
+<meta name="description" content="Logo in. Event in. Square and story out. Nine bucks. Promo flyers for bars, clubs, karaoke, and lodges.">
+<style>
+  :root { --bg:#0c0c0e; --card:#17171b; --line:#2a2a30; --text:#f4f1ea; --muted:#a39e94; --gold:#e4b15a; --hot:#ff4d2e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Georgia, "Times New Roman", serif; background:var(--bg); color:var(--text); }
+  header, main { max-width:980px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:clamp(2.2rem, 7vw, 4.2rem); line-height:.95; margin:8px 0 10px; letter-spacing:-.03em; }
+  .sub { color:var(--muted); font-size:1.15rem; margin:0 0 22px; }
+  .price { display:inline-block; background:var(--gold); color:#1a1206; font-weight:700; padding:6px 10px; border-radius:999px; font-family:system-ui,sans-serif; font-size:.9rem; }
+  form, .out { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+  label { display:block; font-family:system-ui,sans-serif; font-size:.78rem; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin:12px 0 6px; }
+  input, select { width:100%; background:#0e0e11; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:12px; font-size:1rem; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button { font-family:system-ui,sans-serif; border:0; border-radius:12px; padding:14px 16px; font-size:1rem; font-weight:700; cursor:pointer; }
+  .make { width:100%; margin-top:16px; background:var(--hot); color:white; }
+  .buy { background:var(--gold); color:#1a1206; }
+  .ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .grid { display:grid; grid-template-columns:1fr; gap:16px; margin-top:18px; }
+  canvas { width:100%; height:auto; border-radius:12px; background:#111; }
+  .err { color:#ffb4a8; font-family:system-ui,sans-serif; min-height:1.2em; }
+  footer { color:var(--muted); font-family:system-ui,sans-serif; font-size:.85rem; margin-top:28px; }
+  @media (min-width:800px) { .grid { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="price">$9 a pack · square + story</span>
+  <h1>Flyer up before last call.</h1>
+  <p class="sub">Logo in. Event in. Square and story out. Nine bucks. Built for bars, clubs, karaoke nights, and lodges.</p>
+</header>
+<main>
+  <form id="f">
+    <label>Logo or room photo (optional)</label>
+    <input type="file" id="photo" accept="image/*">
+    <label>Event name</label>
+    <input id="event" required placeholder="Karaoke Tuesday">
+    <div class="row">
+      <div><label>Venue</label><input id="venue" placeholder="The room"></div>
+      <div><label>City</label><input id="city" placeholder="Zephyrhills"></div>
+    </div>
+    <div class="row">
+      <div><label>Date</label><input id="date" placeholder="Tue Oct 7"></div>
+      <div><label>Start</label><input id="time" placeholder="9:00 PM"></div>
+    </div>
+    <label>Hook line</label>
+    <input id="hook" placeholder="$2 domestics · karaoke 9pm">
+    <label>Phone or Instagram</label>
+    <input id="handle" placeholder="@yourbar">
+    <label>Vibe</label>
+    <select id="vibe">
+      <option>Club</option>
+      <option>Karaoke</option>
+      <option>Country bar</option>
+      <option>Lodge</option>
+      <option>Private party</option>
+    </select>
+    <button class="make" type="submit">Make my flyer</button>
+    <p class="err" id="err"></p>
+  </form>
+  <div class="grid">
+    <div class="out"><canvas id="square" width="1080" height="1080"></canvas></div>
+    <div class="out"><canvas id="story" width="1080" height="1920"></canvas></div>
+  </div>
+  <div class="actions">
+    <button class="buy" id="buy" type="button">Buy this pack — $9</button>
+    <button class="ghost" id="dl" type="button" disabled>Download clean files</button>
+  </div>
+  <footer>
+    Free preview is watermarked. $9 unlocks both clean PNGs. Card checkout is not on this page yet — Buy texts the order to (813) 328-6079 so it can be paid and sent back. Tampa Bay / Pasco.
+  </footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let paid = false, logo = null;
+const palettes = {
+  Club: ["#12080c", "#ff2d55", "#f6e7c1"],
+  Karaoke: ["#14081f", "#7c5cff", "#ffe14a"],
+  "Country bar": ["#1a1008", "#c47a2c", "#f3e6cf"],
+  Lodge: ["#10160f", "#2f6b3a", "#e7d7a1"],
+  "Private party": ["#10141c", "#3d7ea6", "#f4f1ea"]
+};
+$("photo").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) { logo = null; return; }
+  const img = new Image();
+  img.onload = () => { logo = img; draw(); };
+  img.src = URL.createObjectURL(file);
+});
+function wrap(ctx, text, x, y, max, lh) {
+  const words = (text || "").split(" ");
+  let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > max && line) { ctx.fillText(line, x, y); line = w; y += lh; }
+    else line = test;
+  }
+  if (line) ctx.fillText(line, x, y);
+  return y;
+}
+function paint(canvas, story) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  const vibe = $("vibe").value;
+  const [bg, accent, ink] = palettes[vibe] || palettes.Club;
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  if (logo) {
+    const scale = Math.max(w / logo.width, h / logo.height);
+    const dw = logo.width * scale, dh = logo.height * scale;
+    ctx.globalAlpha = .45;
+    ctx.drawImage(logo, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, 0, w, h);
+  }
+  ctx.fillStyle = accent; ctx.fillRect(0, 0, w, 18);
+  ctx.fillStyle = ink;
+  ctx.font = "700 42px system-ui, sans-serif";
+  ctx.fillText(($("venue").value || "TONIGHT").toUpperCase(), 64, story ? 180 : 120);
+  ctx.fillStyle = accent;
+  ctx.font = "800 92px Georgia, serif";
+  let y = wrap(ctx, $("event").value || "Your event", 64, story ? 320 : 230, w - 128, 100);
+  ctx.fillStyle = ink;
+  ctx.font = "600 48px system-ui, sans-serif";
+  ctx.fillText([$("date").value, $("time").value].filter(Boolean).join("  ·  ") || "Date · time", 64, y + 80);
+  ctx.font = "400 40px Georgia, serif";
+  wrap(ctx, $("hook").value || "", 64, y + 160, w - 128, 52);
+  ctx.font = "600 36px system-ui, sans-serif";
+  ctx.fillStyle = accent;
+  ctx.fillText([$("city").value, $("handle").value].filter(Boolean).join("   "), 64, h - 90);
+  if (!paid) {
+    ctx.save();
+    ctx.translate(w / 2, h / 2); ctx.rotate(-.4);
+    ctx.font = "800 92px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.28)";
+    ctx.textAlign = "center";
+    ctx.fillText("NIGHTFLYER", 0, 0);
+    ctx.restore();
+  }
+}
+function draw() { paint($("square"), false); paint($("story"), true); }
+$("f").addEventListener("submit", e => {
+  e.preventDefault();
+  if (!$("event").value.trim()) { $("err").textContent = "Event name is required."; return; }
+  $("err").textContent = "";
+  draw();
+});
+function orderText() {
+  return [
+    "NightFlyer order $9",
+    $("event").value, $("venue").value, $("date").value, $("time").value,
+    $("hook").value, $("city").value, $("handle").value, $("vibe").value
+  ].filter(Boolean).join(" | ");
+}
+$("buy").onclick = () => {
+  if (!$("event").value.trim()) { $("err").textContent = "Make the flyer first."; return; }
+  draw();
+  const body = encodeURIComponent(orderText());
+  window.location.href = "sms:8133286079?&body=" + body;
+};
+$("dl").onclick = () => {
+  ["square", "story"].forEach(id => {
+    const a = document.createElement("a");
+    a.href = $(id).toDataURL("image/png");
+    a.download = "nightflyer-" + id + ".png";
+    a.click();
+  });
+};
+const params = new URLSearchParams(location.search);
+if (params.get("paid") === "1") { paid = true; $("dl").disabled = false; $("buy").textContent = "Paid — download ready"; }
+draw();
+</script>
+</body>
+</html>
